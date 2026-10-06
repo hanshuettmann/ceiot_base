@@ -232,13 +232,31 @@ static void http_get(void)
  * --------------------------------------------------------- */
 
 
-static char *POST_DATA_TEMPLATE = "id="DEVICE_ID"&t=%0.2f&h=%0.2f";
+static char *POST_DATA_TEMPLATE = "id="DEVICE_ID"&t=%0.2f&h=%0.2f&p=%0.2f";
 
 static void http_post(float *pressure, float *temperature, float *humidity) {
 
     char post_data[64];
 
-    sprintf(post_data,POST_DATA_TEMPLATE, *temperature, *humidity);
+    //Replace sprintf with snprintf to be more secure
+    int buff = snprintf(
+        post_data,
+        sizeof(post_data),
+        POST_DATA_TEMPLATE,
+        *temperature,
+        *humidity,
+        *pressure
+    );
+
+    if (buff < 0) {
+        ESP_LOGE(TAG, "Error formatting POST data");
+        return;
+    }
+
+    if ((size_t)buff >= sizeof(post_data)) {
+        ESP_LOGE(TAG, "POST data was truncated, increment buffer size");
+        return;
+    }
 
     ESP_LOGI(TAG, "POST %s", SERVER_URL);
     ESP_LOGI(TAG, "POST_DATA %s", post_data);
