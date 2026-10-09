@@ -1,18 +1,18 @@
 const express = require("express");
 const bodyParser = require("body-parser");
-const {MongoClient} = require("mongodb");
+const { MongoClient } = require("mongodb");
 const PgMem = require("pg-mem");
 
 const db = PgMem.newDb();
 
-    const render = require("./render.js");
+const render = require("./render.js");
 // Measurements database setup and access
 
 let database = null;
 const collectionName = "measurements";
 
 async function startDatabase() {
-    const uri = "mongodb://localhost:27017/?maxPoolSize=20&w=majority";	
+    const uri = "mongodb://localhost:27017/?maxPoolSize=20&w=majority";
     const connection = await MongoClient.connect(uri);
     database = connection.db();
 }
@@ -23,71 +23,95 @@ async function getDatabase() {
 }
 
 async function insertMeasurement(message) {
-    const {insertedId} = await database.collection(collectionName).insertOne(message);
+    const { insertedId } = await database.collection(collectionName).insertOne(message);
     return insertedId;
 }
 
 async function getMeasurements() {
-    return await database.collection(collectionName).find({}).toArray();	
+    return await database.collection(collectionName).find({}).toArray();
 }
 
 // API Server
 
 const app = express();
 
-app.use(bodyParser.urlencoded({extended:false}));
-
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.static('spa/static'));
+//Agregamos para recibir json
+app.use(express.json());
 
 const PORT = 8080;
 
 app.post('/measurement', function (req, res) {
--       console.log("device id    : " + req.body.id + " key         : " + req.body.key + " temperature : " + req.body.t + " humidity    : " + req.body.h + " pressure    : " + req.body.p);	
-    const {insertedId} = insertMeasurement({id:req.body.id, t:req.body.t, h:req.body.h, p: req.body.p});
-	res.send("received measurement into " +  insertedId);
+    console.log("device id    : " + req.body.id + " key         : " + req.body.key + " temperature : " + req.body.t + " humidity    : " + req.body.h + " pressure    : " + req.body.p);
+    const { insertedId } = insertMeasurement({ id: req.body.id, t: req.body.t, h: req.body.h, p: req.body.p });
+    res.send("received measurement into " + insertedId);
 });
 
 app.post('/device', function (req, res) {
-	console.log("device id    : " + req.body.id + " name        : " + req.body.n + " key         : " + req.body.k );
+    console.log("device id    : " + req.body.id + " name        : " + req.body.n + " key         : " + req.body.k);
 
-    db.public.none("INSERT INTO devices VALUES ('"+req.body.id+ "', '"+req.body.n+"', '"+req.body.k+"')");
-	res.send("received new device");
+    db.public.none("INSERT INTO devices VALUES ('" + req.body.id + "', '" + req.body.n + "', '" + req.body.k + "')");
+    res.send("received new device");
+});
+
+// Update device, patch para permitir updates parciales
+app.patch('/device/:id', function (req, res) {
+    const n = req.body;
+    const id = req.params.id;
+
+    console.log(`Update device id: ${id}`);
+
+    const result = db.public.oneOrNone(
+        // COALESCE($1, name) -> si $1 es nuevo, actualiza name
+        // COALESCE($1, name) -> si $1 es null, conserva name
+        `UPDATE devices
+         SET name = COALESCE($1, name)
+         WHERE device_id = $2
+         RETURNING device_id, name`,
+        [n ?? null, id]
+    );
+
+    if (!result) return res.status(404).send({ error: "Device not found" });
+
+    res.send(result);
+
 });
 
 
 app.get('/web/device', function (req, res) {
-	var devices = db.public.many("SELECT * FROM devices").map( function(device) {
-		console.log(device);
-		return '<tr><td><a href=/web/device/'+ device.device_id +'>' + device.device_id + "</a>" +
-			       "</td><td>"+ device.name+"</td><td>"+ device.key+"</td></tr>";
-	   }
-	);
-	res.send("<html>"+
-		     "<head><title>Sensores</title></head>" +
-		     "<body>" +
-		        "<table border=\"1\">" +
-		           "<tr><th>id</th><th>name</th><th>key</th></tr>" +
-		           devices +
-		        "</table>" +
-		     "</body>" +
-		"</html>");
+    var devices = db.public.many("SELECT * FROM devices").map(function (device) {
+        console.log(device);
+        return '<tr><td><a href=/web/device/' + device.device_id + '>' + device.device_id + "</a>" +
+            "</td><td>" + device.name + "</td><td>" + device.key + "</td></tr>";
+    }
+    );
+    res.send("<html>" +
+        "<head><title>Sensores</title></head>" +
+        "<body>" +
+        "<table border=\"1\">" +
+        "<tr><th>id</th><th>name</th><th>key</th></tr>" +
+        devices +
+        "</table>" +
+        "</body>" +
+        "</html>");
 });
 
-app.get('/web/device/:id', function (req,res) {
-    var template = "<html>"+
-                     "<head><title>Sensor {{name}}</title></head>" +
-                     "<body>" +
-		        "<h1>{{ name }}</h1>"+
-		        "id  : {{ id }}<br/>" +
-		        "Key : {{ key }}" +
-                     "</body>" +
-                "</html>";
+app.get('/web/device/:id', function (req, res) {
+    var template = "<html>" +
+        "<head><title>Sensor {{name}}</title></head>" +
+        "<body>" +
+        "<h1>{{ name }}</h1>" +
+        "id  : {{ id }}<br/>" +
+        "Key : {{ key }}" +
+        "</body>" +
+        "</html>";
 
 
-    var device = db.public.many("SELECT * FROM devices WHERE device_id = '"+req.params.id+"'");
+    var device = db.public.many("SELECT * FROM devices WHERE device_id = '" + req.params.id + "'");
     console.log(device);
-    res.send(render(template,{id:device[0].device_id, key: device[0].key, name:device[0].name}));
-});	
+    res.send(render(template, { id: device[0].device_id, key: device[0].key, name: device[0].name }));
+});
 
 
 app.get('/term/device/:id', function (req, res) {
@@ -95,31 +119,31 @@ app.get('/term/device/:id', function (req, res) {
     var green = "\33[32m";
     var blue = "\33[33m";
     var reset = "\33[0m";
-    var template = "Device name " + red   + "   {{name}}" + reset + "\n" +
-		   "       id   " + green + "       {{ id }} " + reset +"\n" +
-	           "       key  " + blue  + "  {{ key }}" + reset +"\n";
-    var device = db.public.many("SELECT * FROM devices WHERE device_id = '"+req.params.id+"'");
+    var template = "Device name " + red + "   {{name}}" + reset + "\n" +
+        "       id   " + green + "       {{ id }} " + reset + "\n" +
+        "       key  " + blue + "  {{ key }}" + reset + "\n";
+    var device = db.public.many("SELECT * FROM devices WHERE device_id = '" + req.params.id + "'");
     console.log(device);
-    res.send(render(template,{id:device[0].device_id, key: device[0].key, name:device[0].name}));
+    res.send(render(template, { id: device[0].device_id, key: device[0].key, name: device[0].name }));
 });
 
-app.get('/measurement', async (req,res) => {
+app.get('/measurement', async (req, res) => {
     res.send(await getMeasurements());
 });
 
-app.get('/device', function(req,res) {
-    res.send( db.public.many("SELECT * FROM devices") );
+app.get('/device', function (req, res) {
+    res.send(db.public.many("SELECT * FROM devices"));
 });
 
-startDatabase().then(async() => {
+startDatabase().then(async () => {
 
     const addAdminEndpoint = require("./admin.js");
     addAdminEndpoint(app, render);
 
-    await insertMeasurement({id:'00', t:'18', h:'78'});
-    await insertMeasurement({id:'00', t:'19', h:'77'});
-    await insertMeasurement({id:'00', t:'17', h:'77'});
-    await insertMeasurement({id:'01', t:'17', h:'77'});
+    await insertMeasurement({ id: '00', t: '18', h: '78' });
+    await insertMeasurement({ id: '00', t: '19', h: '77' });
+    await insertMeasurement({ id: '00', t: '17', h: '77' });
+    await insertMeasurement({ id: '01', t: '17', h: '77' });
     console.log("mongo measurement database Up");
 
     db.public.none("CREATE TABLE devices (device_id VARCHAR, name VARCHAR, key VARCHAR)");
