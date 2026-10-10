@@ -5,6 +5,10 @@ const PgMem = require("pg-mem");
 
 const db = PgMem.newDb();
 
+//Agregamos un adaptador
+const { Pool } = db.adapters.createPg();
+const sqlClient = new Pool();
+
 const render = require("./render.js");
 // Measurements database setup and access
 
@@ -56,25 +60,29 @@ app.post('/device', function (req, res) {
 });
 
 // Update device, patch para permitir updates parciales
-app.patch('/device/:id', function (req, res) {
-    const n = req.body;
-    const id = req.params.id;
+app.patch('/device/:id', async function (req, res) {
+    const { n, k } = req.body;
+    const { id } = req.params;
 
-    console.log(`Update device id: ${id}`);
+    try {
+        const result = await sqlClient.query(
+            // COALESCE($1, name) -> si $1 es nuevo, actualiza name
+            // COALESCE($1, name) -> si $1 es null, conserva name
+            `UPDATE devices
+             SET name = COALESCE($1, name),
+                 key = COALESCE($2, key)
+             WHERE device_id = $3
+             RETURNING device_id, name`,
+            [n ?? null, k ?? null, id]
+        );
 
-    const result = db.public.oneOrNone(
-        // COALESCE($1, name) -> si $1 es nuevo, actualiza name
-        // COALESCE($1, name) -> si $1 es null, conserva name
-        `UPDATE devices
-         SET name = COALESCE($1, name)
-         WHERE device_id = $2
-         RETURNING device_id, name`,
-        [n ?? null, id]
-    );
+        if (result.rows.length !== 1) return res.status(404).send({ error: "Could not find device" });
 
-    if (!result) return res.status(404).send({ error: "Device not found" });
+        res.send(result.rows[0]);
 
-    res.send(result);
+    } catch {
+        res.status(500).send({ error: "Could not update device" });
+    }
 
 });
 
