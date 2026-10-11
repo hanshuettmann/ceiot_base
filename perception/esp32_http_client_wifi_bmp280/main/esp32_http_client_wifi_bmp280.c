@@ -13,6 +13,8 @@
 
 #include <bmp280.h>
 
+#include "sdkconfig.h"
+
 #include "esp_http_client.h"
 
 #ifndef APP_CPU_NUM
@@ -20,12 +22,12 @@
 #endif
 
 
-#define WIFI_SSID       ""
-#define WIFI_PASSWORD   ""
+#define WIFI_SSID       CONFIG_APP_WIFI_SSID
+#define WIFI_PASSWORD   CONFIG_APP_WIFI_PASSWORD
 
-#define SERVER_URL      "http://192.168.1.101:8080/measurement"
+#define SERVER_URL CONFIG_APP_SERVER_URL
 
-#define DEVICE_ID "01"
+#define DEVICE_ID  CONFIG_APP_DEVICE_ID
 
 #define WIFI_CONNECTED_BIT BIT0
 

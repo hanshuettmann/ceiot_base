@@ -1,0 +1,15 @@
+menu "App Settings"
+
+config APP_WIFI_SSID
+    string "WiFi SSID"
+    default ""
+
+config APP_WIFI_PASSWORD
+    string "WiFi Password"
+    default ""
+
+config APP_SERVER_URL
+    string "App Server URL"
+    default "http://localhost:8080/measurement"
+
+endmenu
