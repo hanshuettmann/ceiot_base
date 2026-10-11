@@ -12,4 +12,8 @@ config APP_SERVER_URL
     string "App Server URL"
     default "http://localhost:8080/measurement"
 
+config APP_DEVICE_ID
+    string "App Device ID"
+    default "01"
+
 endmenu
