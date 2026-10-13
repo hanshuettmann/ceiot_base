@@ -46,10 +46,28 @@ app.use(express.json());
 
 const PORT = 8080;
 
-app.post('/measurement', function (req, res) {
-    console.log("device id    : " + req.body.id + " key         : " + req.body.key + " temperature : " + req.body.t + " humidity    : " + req.body.h + " pressure    : " + req.body.p);
-    const { insertedId } = insertMeasurement({ id: req.body.id, t: req.body.t, h: req.body.h, p: req.body.p });
-    res.send("received measurement into " + insertedId);
+//Le damos un poco de cariño al endpoint
+app.post('/measurement', async function (req, res) {
+    try {
+        const { id, t, h, p } = req.body;
+        console.log(
+            `device id: ${id}, temperature: ${t}, humidity: ${h}, pressure: ${p}`
+        );
+
+        const insertedId = await insertMeasurement({ id, t, h, p });
+
+        res.status(201).json({
+            message: "Measurement received",
+            insertedId
+        });
+
+    } catch (error) {
+        console.error("Error inserting measurement: ", error);
+
+        res.status(500).json({
+            error: "Could not insert measurement"
+        });
+    }
 });
 
 app.post('/device', function (req, res) {
