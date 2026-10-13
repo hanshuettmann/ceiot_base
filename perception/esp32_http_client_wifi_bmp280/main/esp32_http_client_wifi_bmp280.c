@@ -21,13 +21,12 @@
 #define APP_CPU_NUM PRO_CPU_NUM
 #endif
 
-
-#define WIFI_SSID       CONFIG_APP_WIFI_SSID
-#define WIFI_PASSWORD   CONFIG_APP_WIFI_PASSWORD
+#define WIFI_SSID CONFIG_APP_WIFI_SSID
+#define WIFI_PASSWORD CONFIG_APP_WIFI_PASSWORD
 
 #define SERVER_URL CONFIG_APP_SERVER_URL
 
-#define DEVICE_ID  CONFIG_APP_DEVICE_ID
+#define DEVICE_ID CONFIG_APP_DEVICE_ID
 
 #define WIFI_CONNECTED_BIT BIT0
 
@@ -40,7 +39,7 @@ static EventGroupHandle_t wifi_event_group;
 /* -----------------------------------------------------------
  * WiFi
  * --------------------------------------------------------- */
-void bmp280_test(bmp280_t *dev) 
+void bmp280_test(bmp280_t *dev)
 {
     bmp280_params_t params;
     bmp280_init_default_params(&params);
@@ -53,9 +52,11 @@ void bmp280_test(bmp280_t *dev)
     printf("BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
 }
 
-void bmp280_read(bmp280_t *dev, float *pressure, float *temperature, float *humidity) {
+void bmp280_read(bmp280_t *dev, float *pressure, float *temperature, float *humidity)
+{
 
-    if (bmp280_read_float(dev, temperature, pressure, humidity) != ESP_OK) {
+    if (bmp280_read_float(dev, temperature, pressure, humidity) != ESP_OK)
+    {
         printf("Temperature/pressure reading failed\n");
         return;
     }
@@ -69,7 +70,6 @@ void bmp280_read(bmp280_t *dev, float *pressure, float *temperature, float *humi
         printf("\n");
 }
 
-
 /* -----------------------------------------------------------
  * WiFi
  * --------------------------------------------------------- */
@@ -80,19 +80,22 @@ static void wifi_event_handler(void *arg,
                                void *event_data)
 {
     if (event_base == WIFI_EVENT &&
-        event_id == WIFI_EVENT_STA_START) {
+        event_id == WIFI_EVENT_STA_START)
+    {
 
         esp_wifi_connect();
-
-    } else if (event_base == WIFI_EVENT &&
-               event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    }
+    else if (event_base == WIFI_EVENT &&
+             event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
 
         ESP_LOGI(TAG, "WiFi disconnected, reconnecting...");
         esp_wifi_connect();
         xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
-
-    } else if (event_base == IP_EVENT &&
-               event_id == IP_EVENT_STA_GOT_IP) {
+    }
+    else if (event_base == IP_EVENT &&
+             event_id == IP_EVENT_STA_GOT_IP)
+    {
 
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
 
@@ -110,34 +113,28 @@ static void wifi_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
 
     ESP_ERROR_CHECK(
-        esp_event_loop_create_default()
-    );
+        esp_event_loop_create_default());
 
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 
     ESP_ERROR_CHECK(
-        esp_wifi_init(&cfg)
-    );
+        esp_wifi_init(&cfg));
 
     ESP_ERROR_CHECK(
         esp_event_handler_register(
             WIFI_EVENT,
             ESP_EVENT_ANY_ID,
             &wifi_event_handler,
-            NULL
-        )
-    );
+            NULL));
 
     ESP_ERROR_CHECK(
         esp_event_handler_register(
             IP_EVENT,
             IP_EVENT_STA_GOT_IP,
             &wifi_event_handler,
-            NULL
-        )
-    );
+            NULL));
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -147,19 +144,15 @@ static void wifi_init(void)
     };
 
     ESP_ERROR_CHECK(
-        esp_wifi_set_mode(WIFI_MODE_STA)
-    );
+        esp_wifi_set_mode(WIFI_MODE_STA));
 
     ESP_ERROR_CHECK(
         esp_wifi_set_config(
             WIFI_IF_STA,
-            &wifi_config
-        )
-    );
+            &wifi_config));
 
     ESP_ERROR_CHECK(
-        esp_wifi_start()
-    );
+        esp_wifi_start());
 
     ESP_LOGI(TAG, "Connecting to WiFi...");
 }
@@ -171,7 +164,8 @@ static void wifi_init(void)
 static esp_err_t http_event_handler(
     esp_http_client_event_t *evt)
 {
-    switch (evt->event_id) {
+    switch (evt->event_id)
+    {
 
     case HTTP_EVENT_ON_DATA:
 
@@ -206,20 +200,21 @@ static void http_get(void)
 
     esp_http_client_set_method(
         client,
-        HTTP_METHOD_GET
-    );
+        HTTP_METHOD_GET);
 
     esp_err_t err =
         esp_http_client_perform(client);
 
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
 
         ESP_LOGI(TAG,
                  "GET status = %d, content_length = %lld",
                  esp_http_client_get_status_code(client),
                  esp_http_client_get_content_length(client));
-
-    } else {
+    }
+    else
+    {
 
         ESP_LOGE(TAG,
                  "GET failed: %s",
@@ -233,29 +228,34 @@ static void http_get(void)
  * POST
  * --------------------------------------------------------- */
 
+// Reemplazamos la plantilla en application/x-www-form-urlencoded a JSON
+// static char *POST_DATA_TEMPLATE = "id=" DEVICE_ID "&t=%0.2f&h=%0.2f&p=%0.2f";
+static const char *POST_DATA_TEMPLATE =
+    "{\"id\":\"" DEVICE_ID "\",\"t\":%.2f,\"h\":%.2f,\"p\":%.2f}";
 
-static char *POST_DATA_TEMPLATE = "id="DEVICE_ID"&t=%0.2f&h=%0.2f&p=%0.2f";
+static void http_post(float *pressure, float *temperature, float *humidity)
+{
 
-static void http_post(float *pressure, float *temperature, float *humidity) {
+    //Aumentamos tamaño del buffer
+    char post_data[128];
 
-    char post_data[64];
-
-    //Replace sprintf with snprintf to be more secure
+    // Replace sprintf with snprintf to be more secure
     int buff = snprintf(
         post_data,
         sizeof(post_data),
         POST_DATA_TEMPLATE,
         *temperature,
         *humidity,
-        *pressure
-    );
+        *pressure);
 
-    if (buff < 0) {
+    if (buff < 0)
+    {
         ESP_LOGE(TAG, "Error formatting POST data");
         return;
     }
 
-    if ((size_t)buff >= sizeof(post_data)) {
+    if ((size_t)buff >= sizeof(post_data))
+    {
         ESP_LOGE(TAG, "POST data was truncated, increment buffer size");
         return;
     }
@@ -273,31 +273,32 @@ static void http_post(float *pressure, float *temperature, float *humidity) {
 
     esp_http_client_set_method(
         client,
-        HTTP_METHOD_POST
-    );
+        HTTP_METHOD_POST);
 
+    //Reemplazamos el content type a JSON
     esp_http_client_set_header(
         client,
         "Content-Type",
-        "application/x-www-form-urlencoded"
-    );
+        "application/json");
+        //"application/x-www-form-urlencoded");
 
     esp_http_client_set_post_field(
         client,
         post_data,
-        strlen(post_data)
-    );
+        strlen(post_data));
 
     esp_err_t err =
         esp_http_client_perform(client);
 
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
 
         ESP_LOGI(TAG,
                  "POST status = %d",
                  esp_http_client_get_status_code(client));
-
-    } else {
+    }
+    else
+    {
 
         ESP_LOGE(TAG,
                  "POST failed: %s",
@@ -314,15 +315,14 @@ static void http_post(float *pressure, float *temperature, float *humidity) {
 void app_main(void)
 {
     ESP_ERROR_CHECK(
-        nvs_flash_init()
-    );
+        nvs_flash_init());
 
     bmp280_t dev;
 
     ESP_ERROR_CHECK(i2cdev_init());
 
     ESP_LOGI(TAG, "bmp280 init...");
-    bmp280_test(&dev);    
+    bmp280_test(&dev);
 
     wifi_init();
 
@@ -332,17 +332,17 @@ void app_main(void)
         WIFI_CONNECTED_BIT,
         pdFALSE,
         pdTRUE,
-        portMAX_DELAY
-    );
+        portMAX_DELAY);
 
     ESP_LOGI(TAG, "WiFi connected");
 
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     float pressure, temperature, humidity;
-    while (1) { 
-       bmp280_read(&dev, &pressure, &temperature, &humidity);
-       http_post(&pressure, &temperature, &humidity);
-       vTaskDelay(pdMS_TO_TICKS(5000));
+    while (1)
+    {
+        bmp280_read(&dev, &pressure, &temperature, &humidity);
+        http_post(&pressure, &temperature, &humidity);
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
