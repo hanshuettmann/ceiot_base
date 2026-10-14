@@ -1,6 +1,6 @@
 dependencies:
-  esp-idf-lib/bmp280:
-    component_hash: 82b01a37c200ed66a6c451026e2afdbe8046c6f702d41085e5a1d83aec3a90d8
+  esp-idf-lib/bmp180:
+    component_hash: 5917b47b603718993c72a9665572ace98f4c66063dde56454be8db5c3fe8c1f9
     dependencies:
     - name: esp-idf-lib/esp_idf_lib_helpers
       registry_url: https://components.espressif.com
@@ -70,8 +70,8 @@ dependencies:
       type: idf
     version: 5.5.5
 direct_dependencies:
-- esp-idf-lib/bmp280
+- esp-idf-lib/bmp180
 - idf
-manifest_hash: e9139083c387eac863d68b0a593ed1c2631dc643670305c76e9d8ac18ee8f285
+manifest_hash: 37b6fedbf7f29f13098f7c6adbd82b718859786c3991204006d5508ce8db0251
 target: esp32
 version: 2.0.0

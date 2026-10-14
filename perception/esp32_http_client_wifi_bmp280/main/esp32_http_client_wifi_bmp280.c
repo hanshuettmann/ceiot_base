@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <inttypes.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -11,7 +12,8 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
-#include <bmp280.h>
+// Incluimos la libreria correspondiente
+#include <bmp180.h>
 
 #include "sdkconfig.h"
 
@@ -39,35 +41,39 @@ static EventGroupHandle_t wifi_event_group;
 /* -----------------------------------------------------------
  * WiFi
  * --------------------------------------------------------- */
-void bmp280_test(bmp280_t *dev)
+static void bmp180_setup(bmp180_dev_t *dev)
 {
-    bmp280_params_t params;
-    bmp280_init_default_params(&params);
-    memset(dev, 0, sizeof(bmp280_t));
+    memset(dev, 0, sizeof(bmp180_dev_t));
 
-    ESP_ERROR_CHECK(bmp280_init_desc(dev, BMP280_I2C_ADDRESS_0, 0, I2C_MASTER_SDA, I2C_MASTER_SCL));
-    ESP_ERROR_CHECK(bmp280_init(dev, &params));
+    // Iniciamos sensor
+    ESP_ERROR_CHECK(bmp180_init_desc(dev, I2C_NUM_0, I2C_MASTER_SDA, I2C_MASTER_SCL));
+    ESP_ERROR_CHECK(bmp180_init(dev));
 
-    bool bme280p = dev->id == BME280_CHIP_ID;
-    printf("BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
+    ESP_LOGI(TAG, "BMP180 found at I2C address 0x%02x", BMP180_DEVICE_ADDRESS);
 }
 
-void bmp280_read(bmp280_t *dev, float *pressure, float *temperature, float *humidity)
+// Modificamos lectura del sensor, no tengo humedad en el bmp180 y pressure es uint32
+static bool bmp180_read(bmp180_dev_t *dev, uint32_t *pressure, float *temperature)
 {
+    esp_err_t err = bmp180_measure(
+        dev,
+        temperature,
+        pressure,
+        BMP180_MODE_HIGH_RESOLUTION
+    );
 
-    if (bmp280_read_float(dev, temperature, pressure, humidity) != ESP_OK)
+    if (err != ESP_OK)
     {
-        printf("Temperature/pressure reading failed\n");
-        return;
+        ESP_LOGE(TAG, "BMP180 reading failed: %s", esp_err_to_name(err));
+        return false;
     }
 
-    printf("Pressure: %.2f Pa, Temperature: %.2f C", *pressure, *temperature);
+    ESP_LOGI(TAG,
+             "Pressure: %" PRIu32 " Pa, Temperature: %.2f C",
+             *pressure,
+             *temperature);
 
-    bool bme280p = dev->id == BME280_CHIP_ID;
-    if (bme280p)
-        printf(", Humidity: %.2f\n", *humidity);
-    else
-        printf("\n");
+    return true;
 }
 
 /* -----------------------------------------------------------
@@ -231,12 +237,12 @@ static void http_get(void)
 // Reemplazamos la plantilla en application/x-www-form-urlencoded a JSON
 // static char *POST_DATA_TEMPLATE = "id=" DEVICE_ID "&t=%0.2f&h=%0.2f&p=%0.2f";
 static const char *POST_DATA_TEMPLATE =
-    "{\"id\":\"" DEVICE_ID "\",\"t\":%.2f,\"h\":%.2f,\"p\":%.2f}";
+    "{\"id\":\"" DEVICE_ID "\",\"t\":%.2f,\"h\":null,\"p\":%" PRIu32 "}"; // no tengo humedad, mando null para no modificar api
 
-static void http_post(float *pressure, float *temperature, float *humidity)
+static void http_post(uint32_t *pressure, float *temperature)
 {
 
-    //Aumentamos tamaño del buffer
+    // Aumentamos tamaño del buffer
     char post_data[128];
 
     // Replace sprintf with snprintf to be more secure
@@ -245,7 +251,6 @@ static void http_post(float *pressure, float *temperature, float *humidity)
         sizeof(post_data),
         POST_DATA_TEMPLATE,
         *temperature,
-        *humidity,
         *pressure);
 
     if (buff < 0)
@@ -275,12 +280,12 @@ static void http_post(float *pressure, float *temperature, float *humidity)
         client,
         HTTP_METHOD_POST);
 
-    //Reemplazamos el content type a JSON
+    // Reemplazamos el content type a JSON
     esp_http_client_set_header(
         client,
         "Content-Type",
         "application/json");
-        //"application/x-www-form-urlencoded");
+    //"application/x-www-form-urlencoded");
 
     esp_http_client_set_post_field(
         client,
@@ -317,12 +322,12 @@ void app_main(void)
     ESP_ERROR_CHECK(
         nvs_flash_init());
 
-    bmp280_t dev;
+    bmp180_dev_t dev;
 
     ESP_ERROR_CHECK(i2cdev_init());
 
-    ESP_LOGI(TAG, "bmp280 init...");
-    bmp280_test(&dev);
+    ESP_LOGI(TAG, "BMP180 init...");
+    bmp180_setup(&dev);
 
     wifi_init();
 
@@ -338,11 +343,15 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(1000));
 
-    float pressure, temperature, humidity;
+    uint32_t pressure;
+    float temperature;
     while (1)
     {
-        bmp280_read(&dev, &pressure, &temperature, &humidity);
-        http_post(&pressure, &temperature, &humidity);
+        // Si todo sale bien, mando lectura
+        if (bmp180_read(&dev, &pressure, &temperature))
+        {
+            http_post(&pressure, &temperature);
+        }
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
